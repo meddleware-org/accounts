@@ -1,18 +1,24 @@
 /* login.css: the Meddleware login pages, on the platform's design tokens (css/tokens.css). No font file (the system font stack), no image, no inline style anywhere: the realm's CSP allows only this file. */
 
 /* The page: a centred column on the canvas colour; the tokens give light and dark (data-theme, set by theme-init.js from the system setting). */
+/* Every box includes its padding and border in its width. */
 *, *::before, *::after { box-sizing: border-box; }
+/* The browser's own controls follow the same light or dark choice. */
 html { color-scheme: light dark; }
 body {
+  /* No outer margin; the page fills the window and the canvas colour comes from the tokens. */
   margin: 0;
   min-height: 100vh;
   background: var(--bg);
   color: var(--text);
+  /* The system's own font: the platform ships no font file. */
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   font-size: var(--font-size-base);
+  /* Comfortable reading rhythm. */
   line-height: 1.5;
 }
 .page {
+  /* A single column: brand, card, notice, centred, with the token spacing between them. */
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -31,14 +37,17 @@ body {
 
 /* The card: one column, a readable measure. */
 .card {
+  /* Full width up to a readable measure, then centred by the column. */
   width: 100%;
   max-width: 26rem;
+  /* The surface and border roles of the tokens, so the card lifts off the canvas in both schemes. */
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: var(--space-md);
 }
 h1 {
+  /* The page title: one per page, the first thing a screen reader announces. */
   margin: 0 0 var(--space-sm);
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
@@ -51,8 +60,9 @@ h1 {
 
 /* Fields: a visible label above, a full-width input, the error under it. */
 .field { margin: 0 0 var(--space-sm); }
-.field label { display: block; margin-bottom: 0.25rem; font-weight: var(--font-weight-medium); }
+.field label { /* The label sits above its input, always visible. */ display: block; margin-bottom: 0.25rem; font-weight: var(--font-weight-medium); }
 .field input {
+  /* The input fills the card; padding large enough to tap. */
   width: 100%;
   padding: 0.6rem 0.75rem;
   font: inherit;
@@ -61,11 +71,12 @@ h1 {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
 }
-.field input[aria-invalid="true"] { border-color: var(--danger); }
+.field input[aria-invalid="true"] { border-color: var(--danger); } /* A refused value is marked by the attribute the server sets. */
 .field-error { margin: 0.25rem 0 0; color: var(--danger); }
 
 /* Buttons: real <button>s, full width, a clear focus ring. */
 .button {
+  /* Full width, a generous hit area, bold text. */
   display: block;
   width: 100%;
   margin: 0 0 0.5rem;
@@ -77,28 +88,33 @@ h1 {
   border: 1px solid var(--accent);
   cursor: pointer;
 }
+/* The main action uses the accent role and its contrast pair. */
 .button-primary { background: var(--accent); color: var(--accent-contrast); }
+/* A secondary action is outlined, not filled. */
 .button-secondary { background: transparent; color: var(--text); border-color: var(--border); }
+/* Links keep their underline (colour alone is not a signal). */
 a { color: var(--link, var(--accent)); text-underline-offset: 0.15em; }
+/* The keyboard focus ring: thick, offset, in the tokens' focus colour. */
 :focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 
 /* The server's messages: the kind is spelled out in words (colour is never the only signal), the left rule only reinforces it. */
 .alert {
+  /* A boxed message with a thick leading rule whose colour reinforces the kind. */
   margin: 0 0 var(--space-sm);
   padding: 0.75rem 1rem;
   border: 1px solid var(--border);
   border-inline-start-width: 0.35rem;
   border-radius: var(--radius-sm);
 }
-.alert-kind { font-weight: var(--font-weight-semibold); }
+.alert-kind { /* The kind in words. */ font-weight: var(--font-weight-semibold); }
 .alert-error { border-inline-start-color: var(--danger); }
 .alert-warning { border-inline-start-color: var(--warning); }
 .alert-info, .alert-success { border-inline-start-color: var(--accent); }
-.instruction { margin: 0 0 var(--space-sm); }
+.instruction { margin: 0 0 var(--space-sm); } /* Body text on the info and error pages. */
 
 /* The rights notice: small, centred, quiet. */
-.notice { text-align: center; color: var(--text); }
-.symbol-link { color: inherit; }
+.notice { text-align: center; color: var(--text); } /* The rights notice under the card. */
+.symbol-link { color: inherit; } /* The Kopimi mark takes the text colour. */
 
 /* Forced-colours mode keeps the borders the author drew. */
 @media (forced-colors: active) {

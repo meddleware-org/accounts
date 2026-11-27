@@ -3,7 +3,7 @@
 (function () {
   // The media query that says the system prefers a dark scheme.
   var query = window.matchMedia('(prefers-color-scheme: dark)')
-  // apply: set or clear the attribute the design tokens key their dark values on.
+  /** Set or clear the attribute the design tokens key their dark values on. */
   function apply(dark) {
     if (dark) document.documentElement.setAttribute('data-theme', 'dark')
     else document.documentElement.removeAttribute('data-theme')
