@@ -5,6 +5,9 @@ patch bump, breaking changes included.
 
 ## [Unreleased]
 
+### Added
+- Clients `content-hub-console` and `link-in-bio-console` for the two operator consoles' sign-in (ADR-0016 stage 6): confidential, authorization code with PKCE `S256`, `default.acr.values` `phr`, an exact redirect URI on the console's own host, and a back-channel logout URL inside the cluster. Their secrets come from `${CONTENT_HUB_CONSOLE_SECRET}` and `${LINK_IN_BIO_CONSOLE_SECRET}`.
+
 ## [0.0.5] - 2026-11-27
 
 ### Changed

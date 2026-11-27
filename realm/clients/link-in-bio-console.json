@@ -1,0 +1,24 @@
+{
+  "clientId": "link-in-bio-console",
+  "name": "Link in Bio operator console (backend for frontend)",
+  "protocol": "openid-connect",
+  "publicClient": false,
+  "secret": "${LINK_IN_BIO_CONSOLE_SECRET}",
+  "standardFlowEnabled": true,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": false,
+  "frontchannelLogout": false,
+  "redirectUris": ["https://link-in-bio-admin.meddleware.co.uk/auth/callback"],
+  "webOrigins": [],
+  "attributes": {
+    "pkce.code.challenge.method": "S256",
+    "post.logout.redirect.uris": "https://link-in-bio-admin.meddleware.co.uk/",
+    "default.acr.values": "phr",
+    "use.refresh.tokens": "false",
+    "access.token.lifespan": "300",
+    "backchannel.logout.url": "http://link-in-bio-admin.hosting.svc.cluster.local/auth/backchannel-logout",
+    "backchannel.logout.session.required": "true",
+    "backchannel.logout.revoke.offline.tokens": "false"
+  }
+}

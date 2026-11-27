@@ -1,0 +1,24 @@
+{
+  "clientId": "content-hub-console",
+  "name": "Content hub operator console (backend for frontend)",
+  "protocol": "openid-connect",
+  "publicClient": false,
+  "secret": "${CONTENT_HUB_CONSOLE_SECRET}",
+  "standardFlowEnabled": true,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": false,
+  "frontchannelLogout": false,
+  "redirectUris": ["https://hub.meddleware.co.uk/auth/callback"],
+  "webOrigins": [],
+  "attributes": {
+    "pkce.code.challenge.method": "S256",
+    "post.logout.redirect.uris": "https://hub.meddleware.co.uk/",
+    "default.acr.values": "phr",
+    "use.refresh.tokens": "false",
+    "access.token.lifespan": "300",
+    "backchannel.logout.url": "http://content-hub-admin.publishing.svc.cluster.local/auth/backchannel-logout",
+    "backchannel.logout.session.required": "true",
+    "backchannel.logout.revoke.offline.tokens": "false"
+  }
+}
