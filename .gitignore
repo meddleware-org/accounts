@@ -1,0 +1,5 @@
+# Python bytecode of realm/apply.py.
+__pycache__/
+# Editor and OS files.
+.DS_Store
+*.swp

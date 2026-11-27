@@ -1,0 +1,16 @@
+{
+  "clientId": "console",
+  "protocol": "openid-connect",
+  "publicClient": false,
+  "secret": "${CONSOLE_SECRET}",
+  "standardFlowEnabled": true,
+  "directAccessGrantsEnabled": false,
+  "redirectUris": ["https://console.example.test/callback"],
+  "attributes": {
+    "pkce.code.challenge.method": "S256",
+    "backchannel.logout.url": "https://console.example.test/backchannel-logout",
+    "backchannel.logout.session.required": "true",
+    "default.acr.values": "phr",
+    "use.refresh.tokens": "false"
+  }
+}

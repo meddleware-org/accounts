@@ -1,0 +1,67 @@
+name: CI
+
+# Continuous integration gate for accounts: on every push and pull request, and on the tagged commit of a release (docker-publish.yml calls it).
+#
+# Jobs: realm (Python syntax and a shell check of the smoke test), smoke (build the image, start it read-only against PostgreSQL, apply the realm,
+# check discovery, the flow and a client), scan (Trivy on the built image: fixable CRITICAL and HIGH fail the run).
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+  # The release workflow runs the same checks on the tagged commit.
+  workflow_call:
+
+# Least privilege: CI only reads the repository.
+permissions:
+  contents: read
+
+env:
+  DO_NOT_TRACK: "1"
+
+jobs:
+  # The scripts parse and the shell test is clean under shellcheck.
+  realm:
+    name: Realm script and shell checks
+    runs-on: ubuntu-latest
+    steps:
+      # The commit under test.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Compiles the script without running it.
+      - name: Python syntax
+        run: python3 -m py_compile realm/apply.py
+      # Warnings and above fail the job.
+      - name: shellcheck
+        run: shellcheck -S warning tests/smoke.sh
+
+  # The whole image and realm run end to end (about two minutes).
+  smoke:
+    name: Smoke test (image, realm, discovery)
+    runs-on: ubuntu-latest
+    steps:
+      # The commit under test.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The runner has Docker, not podman; the script takes either.
+      - name: Run tests/smoke.sh
+        env:
+          CONTAINER_TOOL: docker
+        run: bash tests/smoke.sh
+
+  # The built image has no fixable critical or high vulnerability.
+  scan:
+    name: Image scan (Trivy)
+    runs-on: ubuntu-latest
+    steps:
+      # The commit under test.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The same Dockerfile the release builds.
+      - name: Build the image
+        run: docker build -t accounts:scan .
+      # Fixable critical and high findings fail the job; unfixed ones are reported by the release scan only.
+      - name: Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: accounts:scan
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true

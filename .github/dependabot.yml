@@ -1,0 +1,27 @@
+# Dependabot: weekly, grouped update pull requests for the Keycloak base image pin and the GitHub Actions (the fleet policy, D41 and D52, D147).
+# A Keycloak release arrives as one pull request: merge it when the smoke test and the image scan pass, then run the workspace's keycloak-spike harness.
+# Schema version of the Dependabot configuration file.
+version: 2
+updates:
+  # The Dockerfile's upstream image and its digest pin.
+  - package-ecosystem: docker
+    directory: /
+    # Once a week, so a Keycloak release reaches review within a week of publication.
+    schedule:
+      interval: weekly
+    # Five open at a time keeps the queue reviewable.
+    open-pull-requests-limit: 5
+    # One pull request moves every image pin together.
+    groups:
+      docker:
+        patterns: ['*']
+  # Actions are pinned by full commit SHA (D12); one pull request moves every pin together.
+  - package-ecosystem: github-actions
+    directory: /
+    # The same weekly rhythm and queue limit as the image pins.
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns: ['*']

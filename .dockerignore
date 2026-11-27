@@ -1,0 +1,3 @@
+# The image needs only the Dockerfile: the realm scripts, tests, workflows and docs stay out of the build context.
+*
+!Dockerfile
