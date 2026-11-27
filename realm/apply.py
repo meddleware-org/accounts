@@ -242,17 +242,35 @@ def finish_operator(name):
     print(f"operator {name}: bootstrap path closed; the passkey is the only credential")
 
 
+def status(name):
+    """Print the sign-in state of a user without any secret: credential types and labels, the bootstrap marker, pending required actions."""
+    found = api("GET", r("/users?exact=true&username=" + urllib.parse.quote(name)))
+    if not found:
+        die(f"no user {name}")
+    uid = found[0]["id"]
+    creds = api("GET", r(f"/users/{uid}/credentials"))
+    print(f"user {name}: enabled={found[0].get('enabled')}")
+    print("credentials: " + (", ".join(f"{c['type']} ({c.get('userLabel') or 'no label'})" for c in creds) or "none"))
+    print(f"bootstrap marker: {'bootstrap' in (found[0].get('attributes') or {})}; required actions: {found[0].get('requiredActions') or 'none'}")
+
+
 def main():
     """Parse the arguments and run the requested steps."""
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--operator", metavar="NAME", help="create or reset (break-glass) this user in the bootstrap state")
     ap.add_argument("--finish", metavar="NAME", help="close the bootstrap path of this user after they enrolled a key")
+    ap.add_argument("--status", metavar="NAME", help="print this user's (or ALL users') credential types, bootstrap marker and required actions (no secrets)")
     ap.add_argument("--dry-run", action="store_true", help="read and print what would change for clients; realm and flow steps still run")
     args = ap.parse_args()
     # The admin credentials come from the environment, never from arguments (they would show in process listings).
     for var in ("KC_ADMIN", "KC_ADMIN_PW"):
         if var not in os.environ:
             die(f"{var} is not set")
+    if args.status:
+        # `--status ALL` lists every user instead of one.
+        for u in (api("GET", r("/users?max=200")) if args.status == "ALL" else [{"username": args.status}]):
+            status(u["username"])
+        return
     if args.finish:
         finish_operator(args.finish)
         return
