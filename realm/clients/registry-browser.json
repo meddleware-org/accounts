@@ -1,0 +1,15 @@
+{
+  "clientId": "registry-browser",
+  "name": "Registry: read-only browser access through registry-auth-proxy",
+  "protocol": "openid-connect",
+  "publicClient": false,
+  "secret": "${REGISTRY_BROWSER_SECRET}",
+  "standardFlowEnabled": false,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": true,
+  "attributes": {
+    "access.token.lifespan": "60",
+    "client_credentials.use_refresh_token": "false"
+  }
+}

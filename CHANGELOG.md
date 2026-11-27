@@ -5,6 +5,11 @@ patch bump, breaking changes included.
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Added
+- `realm/clients/registry-{ci-push,node-pull,browser}.json`: the registry's three identities as Keycloak clients (ADR-0016 stage 4). `realm/apply.py --status` prints a user's credential types and bootstrap state.
+
 ## [0.0.2] - 2026-11-27
 
 ### Added

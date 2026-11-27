@@ -1,0 +1,15 @@
+{
+  "clientId": "registry-node-pull",
+  "name": "Registry: node image pulls (kubelet)",
+  "protocol": "openid-connect",
+  "publicClient": false,
+  "secret": "${REGISTRY_NODE_PULL_SECRET}",
+  "standardFlowEnabled": false,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": true,
+  "attributes": {
+    "access.token.lifespan": "60",
+    "client_credentials.use_refresh_token": "false"
+  }
+}

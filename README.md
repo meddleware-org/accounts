@@ -11,7 +11,7 @@ registry) and for machines (the access-gate Worker). Services do not talk to Key
 | --- | --- |
 | `Dockerfile` | Upstream Keycloak pinned by digest, then `kc.sh build --db=postgres --health-enabled --metrics-enabled`. The result starts with `start --optimized` on a **read-only root filesystem**. |
 | `realm/apply.py` | Realm as code through Keycloak's admin REST API (idempotent): the realm, the passkey-only browser flow, the clients in `realm/clients/*.json`, and the operator (`--operator`, `--finish`). |
-| `realm/clients/` | One Keycloak client representation per file; `${NAME}` is replaced from the environment so secrets and public keys never sit in git. Empty until the stages that need a client (hub, Link in Bio console, Grafana, registry, the Worker) add theirs. |
+| `realm/clients/` | One Keycloak client representation per file; `${NAME}` is replaced from the environment so secrets and public keys never sit in git. Today: the three registry identities (`registry-ci-push`, `registry-node-pull`, `registry-browser`: service accounts with a client secret, because `docker login` can only send a user name and a password; their tokens live 60 s and are never used, the token service only checks that the grant succeeds). The hub, Link in Bio console, Grafana and the Worker add theirs in stages 5 to 7. |
 | `tests/smoke.sh` | Builds the image, starts it against a throw-away PostgreSQL, applies the realm twice, checks discovery, the flow, a client and the operator state. |
 
 ## How sign-in works
