@@ -123,6 +123,8 @@ jobs:
           severity: CRITICAL,HIGH
           exit-code: "1"
           ignore-unfixed: true
+          # Reviewed exceptions, each with a reason and an expiry date (see the file).
+          trivyignores: .trivyignore
 
       # Cosign signs and attests below; it is installed once per job.
       - name: Install cosign

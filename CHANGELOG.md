@@ -5,6 +5,11 @@ patch bump, breaking changes included.
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-11-27
+
+### Added
+- `.trivyignore`: one reviewed, expiring exception (Guava CVE-2026-102554 in upstream Keycloak: not reachable, it needs Java deserialization of untrusted bytes), wired into the CI and release scans. `v0.0.1` was never published because that scan failed.
+
 ## [0.0.1] - 2026-11-27
 
 ### Added

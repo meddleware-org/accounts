@@ -1,0 +1,9 @@
+# Trivy ignore list for the accounts image. Every entry says why and when it ends (the entry expires on the date: a stale ignore fails the scan again).
+#
+# CVE-2026-102554 (HIGH, Guava 33.6.0 bundled in Keycloak 26.8.2; fixed in Guava 33.7.2; GHSA-xxph-c9ww-hj94): memory exhaustion in CompactHashMap,
+# CompactHashSet and MapMakerInternalMap when they are read back with Java native deserialization (ObjectInputStream.readObject) from attacker-controlled
+# bytes. Not reachable here: Keycloak does not deserialize untrusted Java streams from the network (its caches are local, the single pod has no cluster
+# transport, and the public routes are the realm's HTTP endpoints). Cannot be fixed by us without replacing a jar inside the upstream image; it moves
+# with the next Keycloak release. Accepted by the maintainer on 2026-11-27. Revisit: when a Keycloak release bundles Guava 33.7.2 or later, and in any
+# case by the expiry below. Recorded in FU-0213.
+CVE-2026-102554 exp:2026-12-27
