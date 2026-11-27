@@ -16,6 +16,9 @@ LABEL org.opencontainers.image.title="accounts" \
       org.opencontainers.image.licenses="0BSD" \
       org.opencontainers.image.version="${VERSION}"
 
+# The platform's login theme (ADR-0016, FU-0182): templates, one stylesheet on the design tokens, two small scripts. Keycloak reads themes from this directory at run time.
+COPY --chown=1000:0 theme/ /opt/keycloak/themes/
+
 # Build-time options only: the database vendor (PostgreSQL), and the health and metrics endpoints on the management port. Everything else (database
 # URL, hostname, proxy headers, the bootstrap admin) is a runtime option, so one image serves every instance.
 RUN /opt/keycloak/bin/kc.sh build --db=postgres --health-enabled=true --metrics-enabled=true

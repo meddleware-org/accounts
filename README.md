@@ -12,14 +12,19 @@ registry) and for machines (the access-gate Worker). Services do not talk to Key
 | `Dockerfile` | Upstream Keycloak pinned by digest, then `kc.sh build --db=postgres --health-enabled --metrics-enabled`. The result starts with `start --optimized` on a **read-only root filesystem**. |
 | `realm/apply.py` | Realm as code through Keycloak's admin REST API (idempotent): the realm, the passkey-only browser flow, the clients in `realm/clients/*.json`, and the operator (`--operator`, `--finish`). |
 | `realm/clients/` | One Keycloak client representation per file; `${NAME}` is replaced from the environment so secrets and public keys never sit in git. Today: the three registry identities (`registry-ci-push`, `registry-node-pull`, `registry-browser`: service accounts with a client secret, because `docker login` can only send a user name and a password; their tokens live 60 s and are never used, the token service only checks that the grant succeeds). The hub, Link in Bio console, Grafana and the Worker add theirs in stages 5 to 7. |
+| `theme/meddleware/login/` | The login theme: page templates (username, password, key sign-in, key registration, errors, sign-out), `css/login.css` on `css/tokens.css` (vendored from `@meddleware/design-tokens`), `js/webauthn.js`, `js/theme-init.js`. |
+| `tests/theme.sh` | Builds the image, applies the realm, and walks every sign-in page in a browser (virtual key): axe, Content-Security-Policy, storage, cookies; screenshots to `$OUT/shots`. |
 | `tests/smoke.sh` | Builds the image, starts it against a throw-away PostgreSQL, applies the realm twice, checks discovery, the flow, a client and the operator state. |
 
 ## How sign-in works
 
 - **Passkey only.** Operators sign in with a security key that verifies the user (WebAuthn passwordless, user verification required, a resident credential). There is no password and no email step.
   A successful sign-in has `acr` = `phr` (LoA 2), which is what the consoles require.
-- **Enrolment and break-glass are one path.** WebAuthn cannot enrol the first key, so a user with the attribute `bootstrap=true` gets a one-time password and the register-key step. After
-  enrolment, `realm/apply.py --finish NAME` deletes the password and the marker. If the key is lost, `realm/apply.py --operator NAME` deletes the lost credentials and arms the path again.
+- **Enrolment and break-glass are one path.** WebAuthn cannot enrol the first key, so a user with the attribute `bootstrap=true` gets a one-time password and the register-key step, shown when they sign in at any
+  application. After enrolment, `realm/apply.py --finish NAME` deletes the password and the marker. If the key is lost, `realm/apply.py --operator NAME` deletes the lost credentials and arms the path again. An extra key for
+  someone who already has one: `realm/apply.py --add-key NAME`, then they sign in. Keycloak's own account console is **disabled** (it cannot run under the strict policy below).
+- **A strict Content-Security-Policy and a login theme.** `theme/meddleware/login` (templates, one stylesheet on the platform's design tokens, two small scripts, no font, no image, no inline script or style) is the realm's login theme;
+  the realm sends `default-src 'none'; script-src 'self'; style-src 'self'; ...`. `tests/theme.sh` walks every page with a virtual key: axe (light and dark), no policy violation, nothing stored.
 - **Machines** use a client with `private_key_jwt` (ES256) and DPoP-bound RFC 9068 access tokens; see the contract.
 
 The full results of the spike that settled these choices are in the Meddleware workspace repository (ADR-0016, "Spike results").

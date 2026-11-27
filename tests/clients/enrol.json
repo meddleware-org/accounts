@@ -1,0 +1,12 @@
+{
+  "clientId": "enrol",
+  "name": "Test client: any application that signs in (used to enrol a key in the tests)",
+  "protocol": "openid-connect",
+  "publicClient": true,
+  "standardFlowEnabled": true,
+  "directAccessGrantsEnabled": false,
+  "redirectUris": ["http://kc.localhost:8080/enrolled"],
+  "attributes": {
+    "pkce.code.challenge.method": "S256"
+  }
+}

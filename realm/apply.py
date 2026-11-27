@@ -9,6 +9,7 @@ a realm. What it builds:
   * browser flow `passkey-browser`: a username, then EITHER the bootstrap path (users with the attribute `bootstrap=true`: a one-time password and
     the register-key required action, used for the first enrolment and for break-glass) OR the passkey path (everyone else: WebAuthn passwordless
     with user verification, reaching level 2);
+  * Keycloak's account console disabled (it cannot run under the strict policy; see disable_account_console);
   * the realm roles in ROLES (`--grant NAME ROLE` gives one to a user; `--set-email NAME EMAIL` sets an email);
   * one client per file in `realm/clients/*.json` (a Keycloak ClientRepresentation). `${NAME}` in a file is replaced by the environment variable
     NAME, so secrets and public keys never sit in git; a missing variable stops the run.
@@ -38,6 +39,10 @@ REALM = os.environ.get("REALM", "meddleware")
 HERE = os.path.dirname(os.path.abspath(__file__))
 # Where the client files are read from (CLIENTS_DIR overrides it, for the smoke test's fixtures).
 CLIENTS = os.environ.get("CLIENTS_DIR", os.path.join(HERE, "clients"))
+# The Content-Security-Policy of every page the realm serves (the login pages and the account console): scripts and styles only from Keycloak's own origin, nothing inline, no plug-ins, no framing, no
+# <base>. (No form-action: Chromium applies it to the redirect after a form post, which goes back to the application.) CSP_MODE=report-only sends it as a report-only header while it is being tried out.
+CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; frame-src 'none'; "
+       "frame-ancestors 'none'; object-src 'none'; base-uri 'none'")
 # Realm roles the platform's clients map to application roles (a client's `roles` claim). `grafana-admin`: Grafana Admin (stage 5, ADR-0016).
 ROLES = ("grafana-admin",)
 # The admin token, fetched on first use.
@@ -111,6 +116,8 @@ def ensure_realm():
         "attributes": {"acr.loa.map": json.dumps({"phr": "2"})},
         # A security key (roaming authenticator) with user verification and a resident credential (ADR-0016 Q3).
         "webAuthnPolicyPasswordlessAuthenticatorAttachment": "cross-platform", "webAuthnPolicyPasswordlessUserVerificationRequirement": "required",
+        # The login theme of the accounts repository (theme/meddleware/login) and the name it shows.
+        "loginTheme": "meddleware", "displayName": "Meddleware",
         "webAuthnPolicyPasswordlessResidentKey": "required", "webAuthnPolicyPasswordlessRpEntityName": "Meddleware",
         # The same physical key cannot be registered twice (a second key must be a different one), so "two keys" always means two.
         "webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister": True,
@@ -123,6 +130,15 @@ def ensure_realm():
         current.update({k: v for k, v in settings.items() if k != "attributes"})
         current.setdefault("attributes", {}).update(settings["attributes"])
         api("PUT", r(""), current)
+    # The security headers: the realm's existing set, with the Content-Security-Policy replaced (a partial map would reset the others).
+    realm = api("GET", r(""))
+    headers = dict(realm.get("browserSecurityHeaders") or {})
+    report_only = os.environ.get("CSP_MODE") == "report-only"
+    # With CSP_MODE=report-only the strict policy is only reported while it is being tried, and the old header stays in force.
+    headers["contentSecurityPolicy"] = "frame-src 'self'; frame-ancestors 'self'; object-src 'none';" if report_only else CSP
+    headers["contentSecurityPolicyReportOnly"] = CSP if report_only else ""
+    realm["browserSecurityHeaders"] = headers
+    api("PUT", r(""), realm)
     # Attributes the admin sets (the bootstrap marker) are kept only when unmanaged attributes are enabled for admins.
     # The user profile decides which attributes survive a save; unmanaged ones are dropped unless this policy allows them.
     profile = api("GET", r("/users/profile"))
@@ -149,6 +165,7 @@ def grant(name, role):
     found = api("GET", r("/users?exact=true&username=" + urllib.parse.quote(name)))
     if not found:
         die(f"no user {name}")
+    # The role representation Keycloak wants in the mapping request.
     rep = api("GET", r(f"/roles/{urllib.parse.quote(role)}"))
     api("POST", r(f"/users/{found[0]['id']}/role-mappings/realm"), [rep])
     print(f"user {name}: has role {role}")
@@ -239,6 +256,33 @@ def ensure_clients(dry):
             api("POST", r("/clients"), client)
 
 
+def disable_account_console():
+    """Disable Keycloak's self-service account console (the clients `account` and `account-console`).
+
+    The account console is a single-page app that needs inline scripts and styles, which the realm's strict Content-Security-Policy refuses (and the Ingress does not route it). Nothing in this platform
+    needs it: keys are enrolled and added through the sign-in flow's own required action (`--operator`, `--add-key`), which the login theme serves under the policy."""
+    # Both built-in clients: the old and the current account console.
+    for client_id in ("account", "account-console"):
+        found = api("GET", r("/clients?clientId=" + urllib.parse.quote(client_id)))
+        if found and found[0].get("enabled", True):
+            found[0]["enabled"] = False
+            api("PUT", r(f"/clients/{found[0]['id']}"), found[0])
+
+
+def add_key(name):
+    """Ask a user (who already signs in with a key) to register another one at their next sign-in: sets the register-key required action; the user then signs in with the key they have, any application will do."""
+    # The user must exist; their required actions are read first so an action already pending is kept.
+    found = api("GET", r("/users?exact=true&username=" + urllib.parse.quote(name)))
+    if not found:
+        die(f"no user {name}")
+    user = api("GET", r(f"/users/{found[0]['id']}"))
+    actions = set(user.get("requiredActions") or [])
+    actions.add("webauthn-register-passwordless")
+    user["requiredActions"] = sorted(actions)
+    api("PUT", r(f"/users/{found[0]['id']}"), user)
+    print(f"user {name}: will be asked to register another key at the next sign-in (sign in at any application, for example Grafana's \"Sign in with Meddleware\")")
+
+
 def ensure_operator(name):
     """Create the operator (or reset them for break-glass) in the bootstrap state and print the one-time password once."""
     # 18 random bytes (144 bits) from the operating system: used once to enrol the key, then deleted by --finish.
@@ -259,7 +303,7 @@ def ensure_operator(name):
         uid = api("GET", r("/users?exact=true&username=" + urllib.parse.quote(name)))[0]["id"]
     # The one-time password is permanent until --finish removes it (not marked temporary: Keycloak would then ask for a change first).
     api("PUT", r(f"/users/{uid}/reset-password"), {"type": "password", "value": password, "temporary": False})
-    print(f"operator {name}: bootstrap password (shown once, use it to enrol the key, then run with --finish {name}): {password}")
+    print(f"operator {name}: bootstrap password (shown once). Enrol the key by signing in at an application (for example Grafana's \"Sign in with Meddleware\"): the username, this password, then the key. Then run with --finish {name}: {password}")
 
 
 def finish_operator(name):
@@ -300,6 +344,7 @@ def main():
     ap.add_argument("--operator", metavar="NAME", help="create or reset (break-glass) this user in the bootstrap state")
     ap.add_argument("--finish", metavar="NAME", help="close the bootstrap path of this user after they enrolled a key")
     ap.add_argument("--status", metavar="NAME", help="print this user's (or ALL users') credential types, bootstrap marker and required actions (no secrets)")
+    ap.add_argument("--add-key", metavar="NAME", help="ask this user to register another security key at their next sign-in")
     ap.add_argument("--grant", nargs=2, metavar=("NAME", "ROLE"), help="give this user this realm role (one of ROLES)")
     ap.add_argument("--set-email", nargs=2, metavar=("NAME", "EMAIL"), help="set this user's email (marked verified)")
     ap.add_argument("--dry-run", action="store_true", help="read and print what would change for clients; realm and flow steps still run")
@@ -312,6 +357,9 @@ def main():
         # `--status ALL` lists every user instead of one.
         for u in (api("GET", r("/users?max=200")) if args.status == "ALL" else [{"username": args.status}]):
             status(u["username"])
+        return
+    if args.add_key:
+        add_key(args.add_key)
         return
     if args.grant:
         ensure_roles()
@@ -327,6 +375,7 @@ def main():
     ensure_roles()
     ensure_flow()
     ensure_clients(args.dry_run)
+    disable_account_console()
     if args.operator:
         ensure_operator(args.operator)
 

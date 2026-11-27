@@ -1,0 +1,109 @@
+/* login.css: the Meddleware login pages, on the platform's design tokens (css/tokens.css). No font file (the system font stack), no image, no inline style anywhere: the realm's CSP allows only this file. */
+
+/* The page: a centred column on the canvas colour; the tokens give light and dark (data-theme, set by theme-init.js from the system setting). */
+*, *::before, *::after { box-sizing: border-box; }
+html { color-scheme: light dark; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+}
+.page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  /* 16px gutters at phone width, as on the other sites. */
+  padding: var(--space-md) 1rem;
+}
+
+/* The wordmark: plain text. */
+.brand-name {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-brand);
+  letter-spacing: 0.02em;
+}
+
+/* The card: one column, a readable measure. */
+.card {
+  width: 100%;
+  max-width: 26rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-md);
+}
+h1 {
+  margin: 0 0 var(--space-sm);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.25;
+}
+
+/* The line that says who is signing in, with the way back. */
+.who { margin: 0 0 var(--space-sm); }
+.who-label { color: var(--text-muted, var(--text)); }
+
+/* Fields: a visible label above, a full-width input, the error under it. */
+.field { margin: 0 0 var(--space-sm); }
+.field label { display: block; margin-bottom: 0.25rem; font-weight: var(--font-weight-medium); }
+.field input {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.field input[aria-invalid="true"] { border-color: var(--danger); }
+.field-error { margin: 0.25rem 0 0; color: var(--danger); }
+
+/* Buttons: real <button>s, full width, a clear focus ring. */
+.button {
+  display: block;
+  width: 100%;
+  margin: 0 0 0.5rem;
+  padding: 0.7rem 1rem;
+  font: inherit;
+  font-weight: var(--font-weight-semibold);
+  text-align: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent);
+  cursor: pointer;
+}
+.button-primary { background: var(--accent); color: var(--accent-contrast); }
+.button-secondary { background: transparent; color: var(--text); border-color: var(--border); }
+a { color: var(--link, var(--accent)); text-underline-offset: 0.15em; }
+:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
+
+/* The server's messages: the kind is spelled out in words (colour is never the only signal), the left rule only reinforces it. */
+.alert {
+  margin: 0 0 var(--space-sm);
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-inline-start-width: 0.35rem;
+  border-radius: var(--radius-sm);
+}
+.alert-kind { font-weight: var(--font-weight-semibold); }
+.alert-error { border-inline-start-color: var(--danger); }
+.alert-warning { border-inline-start-color: var(--warning); }
+.alert-info, .alert-success { border-inline-start-color: var(--accent); }
+.instruction { margin: 0 0 var(--space-sm); }
+
+/* The rights notice: small, centred, quiet. */
+.notice { text-align: center; color: var(--text); }
+.symbol-link { color: inherit; }
+
+/* Forced-colours mode keeps the borders the author drew. */
+@media (forced-colors: active) {
+  .button, .field input, .card { border: 1px solid CanvasText; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

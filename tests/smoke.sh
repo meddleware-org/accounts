@@ -49,6 +49,12 @@ TOKEN="$(curl -s -d grant_type=password -d client_id=admin-cli -d username=admin
 REALM="$(curl -s -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:$PORT/admin/realms/meddleware")"
 python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["browserFlow"]=="passkey-browser" and d["webAuthnPolicyPasswordlessUserVerificationRequirement"]=="required"' "$REALM" \
   && ok "browser flow is passkey-browser; user verification required" || bad "realm settings"
+python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["loginTheme"]=="meddleware" and "script-src '"'"'self'"'"'" in d["browserSecurityHeaders"]["contentSecurityPolicy"] and "unsafe-inline" not in d["browserSecurityHeaders"]["contentSecurityPolicy"]' "$REALM" \
+  && ok "login theme meddleware and the strict Content-Security-Policy are set" || bad "theme or CSP not set"
+ACCT="$(curl -s -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:$PORT/admin/realms/meddleware/clients?clientId=account-console")"
+python3 -c 'import json,sys; assert json.loads(sys.argv[1])[0]["enabled"] is False' "$ACCT" && ok "the account console client is disabled" || bad "account console still enabled"
+curl -s "http://127.0.0.1:$PORT/realms/meddleware/protocol/openid-connect/auth?client_id=console&response_type=code&redirect_uri=https%3A%2F%2Fconsole.example.test%2Fcallback&scope=openid&state=s&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256" | grep -q 'resources/.*/login/meddleware/css/login.css' \
+  && ok "the sign-in page is served by the meddleware theme" || bad "the sign-in page does not use the theme"
 CLIENT="$(curl -s -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:$PORT/admin/realms/meddleware/clients?clientId=console")"
 python3 -c 'import json,sys; c=json.loads(sys.argv[1])[0]; assert c["attributes"]["pkce.code.challenge.method"]=="S256"' "$CLIENT" && ok "client from file: PKCE S256 required" || bad "client"
 OUT="$(python3 "$ROOT/realm/apply.py" --finish operator 2>&1)"; grep -q 'no passkey yet' <<< "$OUT" && ok "--finish refuses before a key is enrolled" || bad "--finish did not refuse"

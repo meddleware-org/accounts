@@ -5,6 +5,15 @@ patch bump, breaking changes included.
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-11-27
+
+### Added
+- The login theme `meddleware` (`theme/meddleware/login`): every page of the passkey-only sign-in on the platform's design tokens, light and dark by the system setting, with no inline script, style or handler, no font, no image, no storage. The realm sends a strict Content-Security-Policy and uses the theme. `tests/theme.sh` checks every page with axe, for policy violations, storage and cookies.
+- `realm/apply.py --add-key NAME`: ask an operator who has a key to register another at their next sign-in.
+
+### Changed
+- Keycloak's account console is disabled (it cannot run under the policy); keys are enrolled through the sign-in flow. The key registration page has a real, labelled name field instead of a browser prompt.
+
 ### Changed
 - The user profile no longer requires first name, last name or email (a user without them was sent to an "update your profile" page at sign-in). `realm/apply.py --grant`, `--set-email` and the `grafana-admin` role; `realm/clients/grafana.json` (stage 5).
 - The realm sets `ResidentKey: required` instead of the deprecated `RequireResidentKey`, and `AvoidSameAuthenticatorRegister` (the same physical key cannot be enrolled twice).

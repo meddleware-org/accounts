@@ -5,9 +5,10 @@ The Meddleware identity provider: a Keycloak image (build-time options baked in)
 
 ## Layout
 
-- `Dockerfile` — upstream Keycloak by digest, `kc.sh build`, `CMD ["start", "--optimized"]`. No theme yet (FU-0182).
+- `Dockerfile` — upstream Keycloak by digest, the theme copied in, `kc.sh build`, `CMD ["start", "--optimized"]`.
+- `theme/meddleware/login/` — the login theme (extends `base`): `template.ftl` and one template per page, `resources/css/{tokens,login}.css`, `resources/js/{theme-init,webauthn}.js`. Rules: no inline script, style or event handler; no external host; no storage; `tokens.css` is a copy of `@meddleware/design-tokens` `src/tokens.css` (refresh it when the tokens change).
 - `realm/apply.py` — idempotent realm as code over the admin REST API; `realm/clients/*.json` — one client each, `${ENV}` substituted.
-- `tests/smoke.sh` — build + run read-only + apply twice + checks; `tests/clients/` — its fixtures.
+- `tests/theme.sh` + `tests/theme-check.mjs` — the browser test of the theme (axe, CSP, storage, cookies); `tests/smoke.sh` — build + run read-only + apply twice + checks; `tests/clients/` — its fixtures.
 - `.github/workflows/` — `ci.yml` (realm checks, smoke, Trivy) and `docker-publish.yml` (tags `v*`: publish to quay.io and Docker Hub, sign, SBOM, provenance, mirror to the private registry).
 
 ## Commands
@@ -25,6 +26,7 @@ The browser half (virtual security key: enrol, passkey sign-in, logout, break-gl
 - **Read-only root filesystem.** Anything that needs a write at start-up means a build-time option is missing from the `Dockerfile` (`kc.sh build`).
 - **No secret in git.** Client files hold `${NAME}`; the values come from the environment (the instance's Secrets). `apply.py` prints the operator's one-time password once and stores it nowhere.
 - **The passkey flow is the contract's assurance.** Do not add a password or email path to the browser flow; the bootstrap path is for enrolment and break-glass only and closes with `--finish`.
+- **The realm's Content-Security-Policy is strict** (`realm/apply.py`, `CSP`): a template that needs an inline script or style is a bug in the template. Keycloak's own account console cannot run under it and is disabled; keys are enrolled through the sign-in flow (`--operator`, `--add-key`). Keycloak itself appends one inline `history.replaceState` script to form-post responses, which the policy refuses harmlessly (accepted in the test).
 - **No telemetry, no third-party call** from the image or the scripts.
 - **Versions:** patch bumps until mainnet (workspace rule); the image tag follows the repository tag.
 
