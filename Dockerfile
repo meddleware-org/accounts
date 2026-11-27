@@ -6,7 +6,7 @@
 
 # The upstream image, pinned by digest (the exact bytes are fixed; Dependabot moves the pin). quay.io/keycloak/keycloak publishes no cosign signature, so
 # the digest pin plus the Trivy scan of the result in CI is the control.
-FROM quay.io/keycloak/keycloak:26.8.2@sha256:75b5c435a83b530caba5923922f93d47b2e3f8b4ad9e79200581122996653e55
+FROM quay.io/keycloak/keycloak:26.8.2@sha256:7e66a96e4739239070aeaf72e4c5decf0f7f682cfc725b9f7ea2b336eaba38b3
 
 # OCI labels: who built this and from what (the release workflow overrides VERSION).
 ARG VERSION=dev
