@@ -1,0 +1,35 @@
+{
+  "clientId": "grafana",
+  "name": "Grafana (monitoring)",
+  "protocol": "openid-connect",
+  "publicClient": false,
+  "secret": "${GRAFANA_CLIENT_SECRET}",
+  "standardFlowEnabled": true,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": false,
+  "redirectUris": ["https://grafana.meddleware.co.uk/login/generic_oauth"],
+  "webOrigins": [],
+  "attributes": {
+    "pkce.code.challenge.method": "S256",
+    "post.logout.redirect.uris": "https://grafana.meddleware.co.uk/login",
+    "default.acr.values": "phr",
+    "use.refresh.tokens": "false",
+    "access.token.lifespan": "300"
+  },
+  "protocolMappers": [
+    {
+      "name": "realm roles as roles",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-realm-role-mapper",
+      "config": {
+        "claim.name": "roles",
+        "multivalued": "true",
+        "jsonType.label": "String",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true"
+      }
+    }
+  ]
+}

@@ -6,6 +6,7 @@ patch bump, breaking changes included.
 ## [Unreleased]
 
 ### Changed
+- The user profile no longer requires first name, last name or email (a user without them was sent to an "update your profile" page at sign-in). `realm/apply.py --grant`, `--set-email` and the `grafana-admin` role; `realm/clients/grafana.json` (stage 5).
 - The realm sets `ResidentKey: required` instead of the deprecated `RequireResidentKey`, and `AvoidSameAuthenticatorRegister` (the same physical key cannot be enrolled twice).
 
 ## [Unreleased]

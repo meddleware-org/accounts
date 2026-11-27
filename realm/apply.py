@@ -9,6 +9,7 @@ a realm. What it builds:
   * browser flow `passkey-browser`: a username, then EITHER the bootstrap path (users with the attribute `bootstrap=true`: a one-time password and
     the register-key required action, used for the first enrolment and for break-glass) OR the passkey path (everyone else: WebAuthn passwordless
     with user verification, reaching level 2);
+  * the realm roles in ROLES (`--grant NAME ROLE` gives one to a user; `--set-email NAME EMAIL` sets an email);
   * one client per file in `realm/clients/*.json` (a Keycloak ClientRepresentation). `${NAME}` in a file is replaced by the environment variable
     NAME, so secrets and public keys never sit in git; a missing variable stops the run.
 
@@ -37,6 +38,8 @@ REALM = os.environ.get("REALM", "meddleware")
 HERE = os.path.dirname(os.path.abspath(__file__))
 # Where the client files are read from (CLIENTS_DIR overrides it, for the smoke test's fixtures).
 CLIENTS = os.environ.get("CLIENTS_DIR", os.path.join(HERE, "clients"))
+# Realm roles the platform's clients map to application roles (a client's `roles` claim). `grafana-admin`: Grafana Admin (stage 5, ADR-0016).
+ROLES = ("grafana-admin",)
 # The admin token, fetched on first use.
 _TOKEN = None
 
@@ -124,7 +127,42 @@ def ensure_realm():
     # The user profile decides which attributes survive a save; unmanaged ones are dropped unless this policy allows them.
     profile = api("GET", r("/users/profile"))
     profile["unmanagedAttributePolicy"] = "ADMIN_EDIT"
+    # The operators are a handful of known people: no first name, last name or email is required of them. Left required, Keycloak interposes an "update your profile" page
+    # (the VERIFY_PROFILE required action) in the sign-in of a user created without them, in front of every application's login.
+    for attribute in profile.get("attributes", []):
+        if attribute.get("name") in ("firstName", "lastName", "email"):
+            attribute.pop("required", None)
     api("PUT", r("/users/profile"), profile)
+
+
+def ensure_roles():
+    """Create each realm role of ROLES that does not exist yet."""
+    for name in ROLES:
+        if api("GET", r(f"/roles/{urllib.parse.quote(name)}"), allow=(404,)) is None:
+            api("POST", r("/roles"), {"name": name, "description": "Platform role (see realm/apply.py ROLES)"})
+
+
+def grant(name, role):
+    """Give a user a realm role from ROLES (idempotent); refuses a role this script does not manage."""
+    if role not in ROLES:
+        die(f"unknown role {role}; the roles are {', '.join(ROLES)}")
+    found = api("GET", r("/users?exact=true&username=" + urllib.parse.quote(name)))
+    if not found:
+        die(f"no user {name}")
+    rep = api("GET", r(f"/roles/{urllib.parse.quote(role)}"))
+    api("POST", r(f"/users/{found[0]['id']}/role-mappings/realm"), [rep])
+    print(f"user {name}: has role {role}")
+
+
+def set_email(name, email):
+    """Set a user's email (marked verified): applications that need one (Grafana) read it from the ID token."""
+    found = api("GET", r("/users?exact=true&username=" + urllib.parse.quote(name)))
+    if not found:
+        die(f"no user {name}")
+    user = api("GET", r(f"/users/{found[0]['id']}"))
+    user["email"], user["emailVerified"] = email, True
+    api("PUT", r(f"/users/{found[0]['id']}"), user)
+    print(f"user {name}: email set")
 
 
 def ensure_flow():
@@ -262,6 +300,8 @@ def main():
     ap.add_argument("--operator", metavar="NAME", help="create or reset (break-glass) this user in the bootstrap state")
     ap.add_argument("--finish", metavar="NAME", help="close the bootstrap path of this user after they enrolled a key")
     ap.add_argument("--status", metavar="NAME", help="print this user's (or ALL users') credential types, bootstrap marker and required actions (no secrets)")
+    ap.add_argument("--grant", nargs=2, metavar=("NAME", "ROLE"), help="give this user this realm role (one of ROLES)")
+    ap.add_argument("--set-email", nargs=2, metavar=("NAME", "EMAIL"), help="set this user's email (marked verified)")
     ap.add_argument("--dry-run", action="store_true", help="read and print what would change for clients; realm and flow steps still run")
     args = ap.parse_args()
     # The admin credentials come from the environment, never from arguments (they would show in process listings).
@@ -273,10 +313,18 @@ def main():
         for u in (api("GET", r("/users?max=200")) if args.status == "ALL" else [{"username": args.status}]):
             status(u["username"])
         return
+    if args.grant:
+        ensure_roles()
+        grant(*args.grant)
+        return
+    if args.set_email:
+        set_email(*args.set_email)
+        return
     if args.finish:
         finish_operator(args.finish)
         return
     ensure_realm()
+    ensure_roles()
     ensure_flow()
     ensure_clients(args.dry_run)
     if args.operator:
