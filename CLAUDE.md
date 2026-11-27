@@ -37,7 +37,7 @@ Every file has a header; every function a doc comment; comments say why. `node s
 - Keycloak lists `plain` among its PKCE methods for the whole realm; a client with `pkce.code.challenge.method=S256` still refuses it (the contract asserts the behaviour).
 - Keycloak emits no `amr`; the assurance is `acr` = `phr`.
 - WebAuthn passwordless cannot enrol the first key: see the bootstrap path in the README.
-- The realm option `requireResidentKey` logs a deprecation warning; revisit when the realm moves to `residentKey`.
+- The realm uses `ResidentKey: required` (the older `RequireResidentKey` option logged a deprecation warning and is no longer set). The WebAuthn policy also has `AcceptableAaguids` (empty: any authenticator model) and `AuthenticatorAttachment` (`cross-platform`): see docs/auth/OPERATIONS.md in the Meddleware workspace, "More passkeys", before changing either.
 
 ## Related
 

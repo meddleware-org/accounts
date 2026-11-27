@@ -108,7 +108,9 @@ def ensure_realm():
         "attributes": {"acr.loa.map": json.dumps({"phr": "2"})},
         # A security key (roaming authenticator) with user verification and a resident credential (ADR-0016 Q3).
         "webAuthnPolicyPasswordlessAuthenticatorAttachment": "cross-platform", "webAuthnPolicyPasswordlessUserVerificationRequirement": "required",
-        "webAuthnPolicyPasswordlessRequireResidentKey": "Yes", "webAuthnPolicyPasswordlessRpEntityName": "Meddleware",
+        "webAuthnPolicyPasswordlessResidentKey": "required", "webAuthnPolicyPasswordlessRpEntityName": "Meddleware",
+        # The same physical key cannot be registered twice (a second key must be a different one), so "two keys" always means two.
+        "webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister": True,
     }
     # A 404 means the realm does not exist yet: create it with the settings; otherwise update the existing realm in place.
     if api("GET", r(""), allow=(404,)) is None:

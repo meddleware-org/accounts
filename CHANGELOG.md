@@ -5,6 +5,9 @@ patch bump, breaking changes included.
 
 ## [Unreleased]
 
+### Changed
+- The realm sets `ResidentKey: required` instead of the deprecated `RequireResidentKey`, and `AvoidSameAuthenticatorRegister` (the same physical key cannot be enrolled twice).
+
 ## [Unreleased]
 
 ### Added
