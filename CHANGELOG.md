@@ -5,6 +5,14 @@ patch bump, breaking changes included.
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-11-27
+
+### Changed
+- Signing in is one press: the key page opens the browser's key prompt by itself as soon as it is shown (the person has just pressed Sign in), and a cancelled prompt, or a browser that needs a click first, is explained in a live region on the page with the button to try again, not sent to the server as an error. The username button reads "Sign in".
+
+### Added
+- A colour-scheme switch (System, Light, Dark) in the login pages' footer: native radio buttons; a choice lasts for the tab only (`sessionStorage`, written only when Light or Dark is picked), so a person who never uses it has nothing stored.
+
 ## [0.0.3] - 2026-11-27
 
 ### Added

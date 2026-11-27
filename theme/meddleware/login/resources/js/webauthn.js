@@ -33,10 +33,25 @@ function fail(formId, error) {
   field(formId).requestSubmit()
 }
 
-/** navigator.credentials.get() for the sign-in page, then submit the assertion. */
+/** A sign-in call is running (the browser's key prompt is open): a second one must not start. */
+var signingIn = false
+
+/** Say something under the button, for everyone including screen readers (the element is a polite live region). */
+function say(text) {
+  var status = field('kc-webauthn-status')
+  if (status) status.textContent = text
+}
+
+/**
+ * navigator.credentials.get() for the sign-in page, then submit the assertion.
+ * It starts by itself when the page opens (the person has just pressed Sign in on the previous page) and again when they press the button.
+ * A browser that refuses to start without a click (Safari), or a prompt the person cancels, is NOT sent to the server as an error: the page says so and the button tries again.
+ */
 async function authenticate(data) {
+  if (signingIn) return
   if (!window.PublicKeyCredential) { fail('webauth', 'WebAuthnUnsupportedBrowser'); return }
-  // The request: the relying party, the server's one-time challenge, and (below) the timeout, the allowed keys and the user-verification rule from the realm's policy.
+  signingIn = true
+  say(data.msgWaiting)
   var publicKey = { rpId: data.rpId, challenge: b64uToBytes(data.challenge) }
   if (Number(data.createTimeout) !== 0) publicKey.timeout = Number(data.createTimeout) * 1000
   // The credentials the user has (when the user is already identified): the browser offers only these.
@@ -54,7 +69,13 @@ async function authenticate(data) {
     if (result.response.userHandle) field('userHandle').value = bytesToB64u(result.response.userHandle)
     field('webauth').requestSubmit()
   } catch (error) {
-    fail('webauth', error)
+    signingIn = false
+    if (error && (error.name === 'NotAllowedError' || error.name === 'AbortError')) {
+      // Cancelled, timed out, or the browser wanted a click first: stay on the page and let the person press the button.
+      say(data.msgRetry)
+    } else {
+      fail('webauth', error)
+    }
   }
 }
 
@@ -105,15 +126,20 @@ async function register(data) {
   }
 }
 
-// Wire the page: the data element says which page this is; the button click is the user gesture the browser requires.
+// Wire the page: the data element says which page this is.
 var data = field('kc-webauthn-data')
 if (data) {
   var d = data.dataset
   var sign = field('authenticateWebAuthnButton')
   var enrol = field('registerWebAuthn')
-  if (sign) sign.addEventListener('click', function () { authenticate(d) }, { once: true })
+  if (sign) {
+    // The button is the fallback and the retry; the sign-in also starts by itself as soon as the page is shown.
+    sign.addEventListener('click', function () { authenticate(d) })
+    authenticate(d)
+  }
+  // Registration always waits for the person to press the button (they are naming the key first).
   if (enrol) enrol.addEventListener('click', function () { register(d) }, { once: true })
-  // A failed call is retried by the server's error page (a form post), never by calling again here.
+  // A failed registration is retried by the server's error page (a form post), never by calling again here.
 }
 
 // The Try again button of the error page submits its form (replaces Keycloak's inline refreshPage()).

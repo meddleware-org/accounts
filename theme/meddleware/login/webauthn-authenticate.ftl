@@ -17,8 +17,10 @@
             <#-- The server's values, for webauthn.js. credentialIds are this user's registered keys (the browser offers only those). -->
             <div id="kc-webauthn-data" hidden
                  data-is-user-identified="${isUserIdentified}" data-challenge="${challenge}" data-user-verification="${userVerification}" data-rp-id="${rpId}"
-                 data-create-timeout="${createTimeout}" data-credential-ids="<#if authenticators??><#list authenticators.authenticators as authenticator>${authenticator.credentialId}<#sep>,</#list></#if>"></div>
+                 data-create-timeout="${createTimeout}" data-msg-waiting="${msg("webauthnWaiting")}" data-msg-retry="${msg("webauthnRetry")}" data-credential-ids="<#if authenticators??><#list authenticators.authenticators as authenticator>${authenticator.credentialId}<#sep>,</#list></#if>"></div>
             <p>${msg("webauthn-passwordless-help-text")}</p>
+            <#-- The browser's key prompt opens by itself; this line says what is happening (a polite live region), and the button starts it again if it did not open or was cancelled. -->
+            <p id="kc-webauthn-status" class="status" role="status" aria-live="polite"></p>
             <button id="authenticateWebAuthnButton" class="button button-primary" type="button" autofocus>${msg("webauthn-doAuthenticate")}</button>
         </div>
     </#if>

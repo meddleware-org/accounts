@@ -23,6 +23,7 @@
     </#if>
     <#-- The page's own script (WebAuthn): an external module, deferred, so the page is readable before it runs. -->
     <script type="module" src="${url.resourcesPath}/js/webauthn.js"></script>
+    <script type="module" src="${url.resourcesPath}/js/theme-switch.js"></script>
 </head>
 <body data-page-id="login-${pageId}">
 <div class="page">
@@ -61,6 +62,13 @@
             <div id="kc-info" class="info"><#nested "info"></div>
         </#if>
     </main>
+    <#-- The colour scheme: System (the default: follows the device), Light or Dark. Native radio buttons in a fieldset; the choice lasts for this tab (theme-init.js). -->
+    <fieldset id="kc-theme-switch" class="theme-switch">
+        <legend>${msg("themeLegend")}</legend>
+        <label><input type="radio" name="mw-theme" value="system" checked> ${msg("themeSystem")}</label>
+        <label><input type="radio" name="mw-theme" value="light"> ${msg("themeLight")}</label>
+        <label><input type="radio" name="mw-theme" value="dark"> ${msg("themeDark")}</label>
+    </fieldset>
     <footer class="notice">
         <#-- The platform's rights notice for site content: the Kopimi mark (linking to the Kopimi document), the year, the organisation and the statement (docs/legal L-IP-1). -->
         <small><a class="symbol-link" href="https://meddleware.co.uk/legal/powr.broccoli-kopimi.pdf" target="_blank" rel="noopener noreferrer" aria-label="${msg("noticeSymbolLabel")}"><svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false"><path d="M12 4L22 23H2Z" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="12" y="18" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="currentColor">C</text></svg></a> ${.now?string('yyyy')} Meddleware Limited. ${msg("noticeStatement")}</small>

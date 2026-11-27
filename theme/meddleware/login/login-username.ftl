@@ -14,7 +14,8 @@
                     <p id="input-error-username" class="field-error" role="alert">${kcSanitize(messagesPerField.get('username'))?no_esc}</p>
                 </#if>
             </div>
-            <button id="kc-login" class="button button-primary" name="login" type="submit">${msg("doContinue")}</button>
+            <#-- One press: the next page opens the key prompt by itself (webauthn.js). -->
+            <button id="kc-login" class="button button-primary" name="login" type="submit">${msg("doSignIn")}</button>
         </form>
     </#if>
 </@layout.registrationLayout>

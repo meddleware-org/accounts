@@ -3,8 +3,9 @@
 /* The page: a centred column on the canvas colour; the tokens give light and dark (data-theme, set by theme-init.js from the system setting). */
 /* Every box includes its padding and border in its width. */
 *, *::before, *::after { box-sizing: border-box; }
-/* The browser's own controls follow the same light or dark choice. */
-html { color-scheme: light dark; }
+/* The browser's own controls (scroll bars, form controls) follow the scheme the page shows (theme-init.js sets data-scheme). */
+html[data-scheme="dark"] { color-scheme: dark; }
+html[data-scheme="light"] { color-scheme: light; }
 body {
   /* No outer margin; the page fills the window and the canvas colour comes from the tokens. */
   margin: 0;
@@ -111,6 +112,14 @@ a { color: var(--link, var(--accent)); text-underline-offset: 0.15em; }
 .alert-warning { border-inline-start-color: var(--warning); }
 .alert-info, .alert-success { border-inline-start-color: var(--accent); }
 .instruction { margin: 0 0 var(--space-sm); } /* Body text on the info and error pages. */
+
+/* The colour-scheme switch: a row of three labelled native radios under the card. */
+.theme-switch { display: flex; gap: var(--space-xs); align-items: center; border: 0; margin: 0; padding: 0; }
+.theme-switch legend { float: left; margin-right: var(--space-xs); padding: 0; }
+.theme-switch label { cursor: pointer; }
+
+/* The line under the key button (what is happening, or that it did not work). */
+.status { min-height: 1.5em; margin: 0 0 var(--space-xs); }
 
 /* The rights notice: small, centred, quiet. */
 .notice { text-align: center; color: var(--text); } /* The rights notice under the card. */
