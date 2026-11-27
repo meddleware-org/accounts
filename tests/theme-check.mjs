@@ -1,11 +1,14 @@
-// theme-check.mjs: browser half of tests/theme.sh. Drives every page of the platform's passkey-only sign-in in Chromium (a virtual security key), and on each page checks:
+// theme-check.mjs: browser half of tests/theme.sh. Drives every page of the platform's passkey-first sign-in in Chromium (a virtual security key), and on each page checks:
 //   - accessibility with axe (WCAG 2.0/2.1/2.2 A and AA, and the enhanced 7:1 contrast rule the platform holds itself to), in the light and in the dark scheme;
 //   - no Content-Security-Policy violation (a `securitypolicyviolation` event or a console message about one): the realm sends a strict policy, so an inline script or style would show here;
-//   - nothing in localStorage or sessionStorage, and only Keycloak's own cookies.
-// It writes a screenshot of every page and scheme to $OUT/shots. Keycloak's own account console is disabled in this realm (it cannot run under the policy); keys are enrolled through the sign-in flow.
+//   - nothing in localStorage or sessionStorage (until the person picks a colour scheme), and only Keycloak's own cookies.
+// And the behaviour the design promises: a key signs in with no username and no click (one press at most); a wrong username and a wrong password for a real user give the SAME message (no account
+// enumeration); the page says so, and the button retries, when the key prompt cannot complete; the colour switch works and stores only what it says; the theme's files carry a version query string
+// (so a browser never keeps the previous release's CSS or script). It writes a screenshot of every page and scheme to $OUT/shots.
 //
 // Environment: KC (Keycloak's public base URL as the browser sees it), USER and PASSWORD (a user in the bootstrap state), OUT (directory for screenshots), HOST_RULES (Chromium host mapping),
-// APPLY (realm/apply.py, run with the environment of this process to close the bootstrap path after the key is enrolled), PLAYWRIGHT_FROM (a package.json beside node_modules holding playwright-core and @axe-core/playwright). Prints one PASS/FAIL line per check and exits 1 on any failure.
+// KC_API (Keycloak as this process reaches it, for the token request), APPLY (realm/apply.py, run with this process's environment to close the bootstrap path), THEME_VERSION (the version in theme.properties), PLAYWRIGHT_FROM (a package.json beside node_modules holding
+// playwright-core and @axe-core/playwright). Prints one PASS/FAIL line per check and exits 1 on any failure.
 import { createRequire } from 'node:module'
 import fs from 'node:fs'
 import { execFileSync } from 'node:child_process'
@@ -31,11 +34,11 @@ const consoleCsp = []
 page.on('console', (m) => { if (/content security policy/i.test(m.text())) consoleCsp.push(m.text().slice(0, 200)) })
 await ctx.addInitScript(() => {
   window.__csp = []
-  document.addEventListener('securitypolicyviolation', (e) => window.__csp.push(`${e.violatedDirective} ${e.blockedURI || 'inline'} on ${e.documentURI.slice(0, 80)} sample: ${(e.sample || '').slice(0, 60)}`))
+  document.addEventListener('securitypolicyviolation', (e) => window.__csp.push(`${e.violatedDirective} ${e.blockedURI || 'inline'} on ${e.documentURI.slice(0, 80)}`))
 })
 
 /**
- * inspect: run the checks on the current page under a name; `a11y` false skips axe (Keycloak's own account console).
+ * inspect: run the checks on the current page under a name; `a11y` false skips axe and screenshots.
  * @param {string} name - the page's name, used in messages and file names
  * @param {boolean} a11y - whether to run axe and take screenshots in both schemes
  */
@@ -66,30 +69,52 @@ async function inspect(name, a11y = true) {
 
 // Any application's sign-in will do: the test client `enrol` (PKCE S256) sends the browser to /enrolled afterwards.
 const SIGN_IN = `${KC}/realms/meddleware/protocol/openid-connect/auth?client_id=enrol&response_type=code&scope=openid&redirect_uri=${encodeURIComponent(`${KC}/enrolled`)}&state=s&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256`
+// The one-time-password page (first enrolment, break-glass) is reached only through the client `bootstrap`, whose flow-binding override selects that flow.
+const BOOT = SIGN_IN.replace('client_id=enrol', 'client_id=bootstrap')
 const back = (u) => u.href.startsWith(`${KC}/enrolled`)
+/** signOut: end the session (the confirmation page, then its button). */
+async function signOut() {
+  await page.goto(`${KC}/realms/meddleware/protocol/openid-connect/logout`)
+  await page.click('#kc-logout')
+  await page.waitForTimeout(600)
+}
 
-console.log('1. username step')
+console.log('1. the first page is the key page: no username is asked, and no other way is offered')
+// No key is registered yet, so the automatic prompt cannot complete: the page stays and says so.
 const first = await page.goto(SIGN_IN)
 const csp = (first?.headers()['content-security-policy'] ?? '')
 check('the realm sends the strict Content-Security-Policy', csp.includes("default-src 'none'") && csp.includes("script-src 'self'") && csp.includes("style-src 'self'") && !csp.includes('unsafe-inline'), csp.slice(0, 160))
-// Show what the page says when the username field never appears (a template error shows as an error page).
-await page.waitForSelector('#username', { timeout: 15000 }).catch(async () => { console.log('  page text:', (await page.locator('body').innerText()).replace(/\n+/g, ' | ').slice(0, 300), page.url().slice(0, 100)) })
-await inspect('username')
+await page.waitForSelector('#authenticateWebAuthnButton', { timeout: 15000 }).catch(async () => { console.log('  first page says:', page.url().slice(0, 110), (await page.locator('body').innerText()).replace(/\n+/g, ' | ').slice(0, 300)) })
+check('no username field on the first page (nothing to enumerate), no password field, no "try another way"', (await page.locator('#username, #password, #try-another-way').count()) === 0)
+await page.waitForFunction(() => document.getElementById('kc-webauthn-status')?.textContent.includes('not used'), null, { timeout: 15000 })
+// The theme's files carry ?v=<version>, and the stylesheet really applies (the fieldset's border is the theme's 0, not the browser default).
+const urls = await page.evaluate(() => [...document.querySelectorAll('link[rel=stylesheet], script[src]')].map((e) => e.href || e.src).filter((u) => u.includes('/login/meddleware/')))
+check(`the theme's stylesheets and scripts carry ?v=${env.THEME_VERSION}`, urls.length >= 4 && urls.every((u) => u.includes(`?v=${env.THEME_VERSION}`)), urls.join(' '))
+check('the theme\'s stylesheet is applied (the colour-scheme fieldset has no border)', (await page.evaluate(() => getComputedStyle(document.getElementById('kc-theme-switch')).borderTopWidth)) === '0px')
+await inspect('passkey-no-key')
 
-console.log('2. an unknown username shows its error in place')
-await page.fill('#username', 'nobody-here')
-await page.click('#kc-login')
-await page.waitForSelector('#input-error-username, .field-error')
-await inspect('username-error')
-
-console.log('3. the bootstrap password step')
-await page.fill('#username', env.USER)
-await page.click('#kc-login')
+console.log('2. the one-time-password page (first enrolment or break-glass), reached through the bootstrap client')
+await page.goto(BOOT)
 await page.waitForSelector('#password')
-check('the page names who is signing in, with a way back', (await page.locator('#kc-attempted-username').innerText()) === env.USER && (await page.locator('#reset-login').count()) === 1)
-await inspect('password')
+await inspect('login')
+
+console.log('3. a wrong username and a wrong password give the same message')
+await page.fill('#username', 'nobody-here')
+await page.fill('#password', 'not-the-password')
+await page.click('#kc-login')
+await page.waitForSelector('#kc-message')
+const unknown = (await page.locator('#kc-message').innerText()).trim()
+await inspect('login-error-unknown-user')
+await page.fill('#username', env.USER)
+await page.fill('#password', 'not-the-password')
+await page.click('#kc-login')
+await page.waitForSelector('#kc-message')
+const wrongPassword = (await page.locator('#kc-message').innerText()).trim()
+check('an unknown user and a wrong password: the same text', unknown === wrongPassword && unknown.length > 0, `${unknown} | ${wrongPassword}`)
+check('and the text names both parts and does not say the user does not exist', /username/i.test(unknown) && /password/i.test(unknown) && !/not found|exist|unknown|no such/i.test(unknown), unknown)
 
 console.log('4. key registration')
+await page.fill('#username', env.USER)
 await page.fill('#password', env.PASSWORD)
 await page.click('#kc-login')
 await page.waitForSelector('#registerWebAuthn')
@@ -103,9 +128,9 @@ const account = await page.goto(`${KC}/realms/meddleware/account/`)
 check('Keycloak\'s account console is disabled', !(await page.locator('body').innerText()).includes('Loading the Account Console'), String(account?.status()))
 const cookies = (await ctx.cookies()).map((c) => c.name)
 check('only Keycloak\'s own cookies are set', cookies.every((n) => /^(AUTH_SESSION_ID|KC_|KEYCLOAK_)/.test(n)), cookies.join(','))
-
-// The key is enrolled: close the bootstrap path (delete the password, clear the marker), as an operator would, so the next sign-in is passkey-only.
+// The key is enrolled: close the bootstrap path (delete the password, clear the marker), as an operator would.
 execFileSync('python3', [env.APPLY, '--finish', env.USER], { env })
+
 console.log('6. sign-out confirmation')
 await page.goto(`${KC}/realms/meddleware/protocol/openid-connect/logout`)
 await page.waitForSelector('#kc-logout')
@@ -114,57 +139,63 @@ await page.click('#kc-logout')
 await page.waitForTimeout(800)
 await inspect('logged-out')
 
-console.log('7. ONE press signs in: the username and a single click, no second click on the key page')
+console.log('7. the key alone signs in: no username, no click')
 await page.goto(SIGN_IN)
-await page.waitForSelector('#username')
-await page.fill('#username', env.USER)
-await page.click('#kc-login')
-// The key page opens the prompt by itself and the virtual key answers: the browser must arrive back at the application with a code, with no further click from the test.
 await page.waitForURL(back, { timeout: 30000 })
-check('one click: the passkey signs in with no second click (no password asked)', new URL(page.url()).searchParams.has('code'))
-await page.goto(`${KC}/realms/meddleware/protocol/openid-connect/logout`)
-await page.click('#kc-logout')
-await page.waitForTimeout(800)
+check('the key page opened the prompt by itself and the key signed in (no username, no click, no password)', new URL(page.url()).searchParams.has('code'))
+// The sign-in is phishing-resistant: the ID token says acr = phr (level 2). The code is exchanged here like an application would (PKCE verifier of the RFC 7636 example challenge).
+const code = new URL(page.url()).searchParams.get('code')
+const tokens = await (await fetch(`${env.KC_API}/realms/meddleware/protocol/openid-connect/token`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+  body: new URLSearchParams({ grant_type: 'authorization_code', client_id: 'enrol', code, redirect_uri: `${KC}/enrolled`, code_verifier: 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk' }) })).json()
+const claims = tokens.id_token ? JSON.parse(Buffer.from(tokens.id_token.split('.')[1], 'base64url').toString()) : {}
+check('the ID token of a key sign-in has acr = phr', claims.acr === 'phr', JSON.stringify(claims.acr ?? tokens))
+await signOut()
 
-console.log('8. when the key prompt cannot complete, the page says so and the button tries again')
-// A key that cannot verify the user makes the automatic prompt fail the way a cancelled one does (NotAllowedError): the page must stay, say so in its live region, and offer the button.
+console.log('8. the password path is closed once the bootstrap path is finished')
+await page.goto(BOOT)
+await page.waitForSelector('#password')
+await page.fill('#username', env.USER)
+await page.fill('#password', env.PASSWORD)
+await page.click('#kc-login')
+await page.waitForSelector('#kc-message')
+check('the old one-time password no longer works', !page.url().startsWith(`${KC}/enrolled`))
+
+console.log('9. when the key prompt cannot complete, the page says so and the button tries again')
+// A key that cannot verify the user makes the automatic prompt fail the way a cancelled one does (NotAllowedError).
 await cdp.send('WebAuthn.setUserVerified', { authenticatorId, isUserVerified: false })
 await page.goto(SIGN_IN)
-await page.waitForSelector('#username')
-await page.fill('#username', env.USER)
-await page.click('#kc-login')
-await page.waitForSelector('#authenticateWebAuthnButton')
 await page.waitForFunction(() => document.getElementById('kc-webauthn-status')?.textContent.includes('not used'), null, { timeout: 15000 })
-check('the page stays and says the key was not used (a live region), not an error page', page.url().includes('login-actions') && (await page.locator('#kc-webauthn-status[role="status"]').count()) === 1)
+check('the page stays and says the key was not used (a live region), not an error page', page.url().includes('/protocol/openid-connect/auth') && (await page.locator('#kc-webauthn-status[role="status"]').count()) === 1)
 await inspect('passkey')
 await cdp.send('WebAuthn.setUserVerified', { authenticatorId, isUserVerified: true })
 await page.click('#authenticateWebAuthnButton')
 await page.waitForURL(back, { timeout: 30000 })
 check('pressing the button tries again and signs in', new URL(page.url()).searchParams.has('code'))
 
-console.log('9. the colour-scheme switch')
-await page.goto(`${KC}/realms/meddleware/protocol/openid-connect/logout`)
-await page.click('#kc-logout')
+console.log('10. the colour-scheme switch')
+await signOut()
+await cdp.send('WebAuthn.setUserVerified', { authenticatorId, isUserVerified: false })
 await page.goto(SIGN_IN)
-await page.waitForSelector('#username')
+await page.waitForSelector('#kc-theme-switch')
 await page.emulateMedia({ colorScheme: 'light' })
 const radios = await page.locator('input[name="mw-theme"]').evaluateAll((r) => r.map((x) => `${x.value}:${x.checked}`))
 check('three native radios, System checked by default', JSON.stringify(radios) === JSON.stringify(['system:true', 'light:false', 'dark:false']), JSON.stringify(radios))
 check('before any choice nothing is stored', (await page.evaluate(() => Object.keys(sessionStorage).length + Object.keys(localStorage).length)) === 0)
 await page.check('input[name="mw-theme"][value="dark"]')
 check('choosing Dark shows the dark scheme at once, even though the system is light', (await page.getAttribute('html', 'data-theme')) === 'dark' && (await page.getAttribute('html', 'data-scheme')) === 'dark')
+check('and the page really turns dark (the background colour changed)', (await page.evaluate(() => getComputedStyle(document.body).backgroundColor)) !== 'rgb(247, 243, 240)' && (await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).replace(/\s/g, '') !== 'rgb(247,243,240)')
 const stored = await page.evaluate(() => ({ session: Object.fromEntries(Object.entries(sessionStorage)), local: Object.keys(localStorage) }))
 check('and stores only mw-color-mode=dark, for this tab (sessionStorage), nothing else', JSON.stringify(stored) === JSON.stringify({ session: { 'mw-color-mode': 'dark' }, local: [] }), JSON.stringify(stored))
-await page.screenshot({ path: `${env.OUT}/shots/username-forced-dark.png`, fullPage: true })
+await page.screenshot({ path: `${env.OUT}/shots/passkey-forced-dark.png`, fullPage: true })
 const forced = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']).withRules(['color-contrast-enhanced']).analyze()
 check('axe finds nothing in the forced dark scheme either', forced.violations.length === 0, forced.violations.map((v) => v.id).join(','))
 await page.goto(SIGN_IN)
-await page.waitForSelector('#username')
+await page.waitForSelector('#kc-theme-switch')
 check('the choice carries to the next page of the visit', (await page.getAttribute('html', 'data-theme')) === 'dark' && (await page.locator('input[name="mw-theme"][value="dark"]').isChecked()))
 await page.check('input[name="mw-theme"][value="system"]')
 check('choosing System forgets it: back to the light system scheme, storage empty again', (await page.getAttribute('html', 'data-theme')) === null && (await page.evaluate(() => Object.keys(sessionStorage).length)) === 0)
 
-console.log('10. the generic error page')
+console.log('11. the generic error page')
 await page.goto(`${KC}/realms/meddleware/protocol/openid-connect/auth?client_id=does-not-exist&response_type=code&redirect_uri=https%3A%2F%2Fexample.test%2F`)
 await page.waitForSelector('#kc-error-message')
 await inspect('error')

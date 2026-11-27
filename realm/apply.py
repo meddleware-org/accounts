@@ -6,9 +6,8 @@ a realm. What it builds:
 
   * realm `meddleware`: phishing-resistant level `phr` = LoA 2; WebAuthn passwordless policy with a security key (cross-platform attachment), user
     verification required and a resident key; unmanaged user attributes enabled for the admin (the bootstrap marker needs them);
-  * browser flow `passkey-browser`: a username, then EITHER the bootstrap path (users with the attribute `bootstrap=true`: a one-time password and
-    the register-key required action, used for the first enrolment and for break-glass) OR the passkey path (everyone else: WebAuthn passwordless
-    with user verification, reaching level 2);
+  * browser flow `passkey-first` (see ensure_flow): no username step; the security key identifies the user (a resident credential, user verification required, level 2 = `phr`), with a
+    one-time-password page (one form with username and password, generic errors) for a first enrolment and for break-glass, which sends the user to register a key;
   * Keycloak's account console disabled (it cannot run under the strict policy; see disable_account_console);
   * the realm roles in ROLES (`--grant NAME ROLE` gives one to a user; `--set-email NAME EMAIL` sets an email);
   * one client per file in `realm/clients/*.json` (a Keycloak ClientRepresentation). `${NAME}` in a file is replaced by the environment variable
@@ -43,6 +42,12 @@ CLIENTS = os.environ.get("CLIENTS_DIR", os.path.join(HERE, "clients"))
 # <base>. (No form-action: Chromium applies it to the redirect after a form post, which goes back to the application.) CSP_MODE=report-only sends it as a report-only header while it is being tried out.
 CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; frame-src 'none'; "
        "frame-ancestors 'none'; object-src 'none'; base-uri 'none'")
+# The browser flows: the applications' one (cookie, then the key) and the one only the `bootstrap` client uses (the one-time-password page).
+FLOW = "passkey-first"
+KEY_FLOW = "Security key"
+OTP_FLOW = "one-time-password"
+# The public address people use (the `--operator` output prints the enrolment link under it); the tests set their own.
+PUBLIC_URL = os.environ.get("KC_PUBLIC_URL", "https://accounts.meddleware.co.uk").rstrip("/")
 # Realm roles the platform's clients map to application roles (a client's `roles` claim). `grafana-admin`: Grafana Admin (stage 5, ADR-0016).
 ROLES = ("grafana-admin",)
 # The admin token, fetched on first use.
@@ -90,11 +95,12 @@ def execution(flow, name, requirement, index=0):
     """Set the requirement of the index-th execution of `flow` whose display name, alias or provider id is `name`."""
     # An authenticator can appear more than once in a flow, so `index` picks which one; `seen` counts the matches so far.
     seen = 0
-    for e in api("GET", r(f"/authentication/flows/{flow}/executions")):
+    path = r(f"/authentication/flows/{urllib.parse.quote(flow)}/executions")
+    for e in api("GET", path):
         if name in (e.get("displayName"), e.get("alias"), e.get("providerId")):
             if seen == index:
                 e["requirement"] = requirement
-                api("PUT", r(f"/authentication/flows/{flow}/executions"), e)
+                api("PUT", path, e)
                 return
             seen += 1
     die(f"no execution {name} in {flow}")
@@ -103,7 +109,7 @@ def execution(flow, name, requirement, index=0):
 def configure(flow, provider, alias, config):
     """Attach a configuration to the first execution of `flow` with the given provider id."""
     # The execution to configure: the first one in the flow with this provider id.
-    e = [x for x in api("GET", r(f"/authentication/flows/{flow}/executions")) if x.get("providerId") == provider][0]
+    e = [x for x in api("GET", r(f"/authentication/flows/{urllib.parse.quote(flow)}/executions")) if x.get("providerId") == provider][0]
     api("POST", r(f"/authentication/executions/{e['id']}/config"), {"alias": alias, "config": config})
 
 
@@ -183,49 +189,71 @@ def set_email(name, email):
 
 
 def ensure_flow():
-    """Build the passkey-only browser flow once and make it the realm's browser flow."""
-    # Build the flow only once: a second run must not create a duplicate (and must not reorder one an admin has changed).
+    """(Re)build the two browser flows and make the passkey-first one the realm's browser flow.
+
+    `passkey-first` (every application's sign-in) has no username step, so there is no username to be told is wrong (OWASP: a valid and an invalid credential look alike): the cookie, then the
+    security key with no user identified yet. The key (a resident credential) says who is signing in, user verification is required, and a level-of-authentication condition makes the result
+    `acr` = `phr` (level 2). An unknown or unusable key gives one generic failure.
+
+    `one-time-password` is bound only to the client `bootstrap` (its flow-binding override, see ensure_clients): ONE page with username and password, so a wrong username and a wrong password give
+    the same message. It exists for a first enrolment or break-glass: a user without the `bootstrap` marker is refused after the password, and a signed-in bootstrap user is sent to register a key
+    by their required action. Nobody meets it by signing in to an application.
+
+    Both are rebuilt on every run (they are small), so a change here reaches the realm by running this script; the realm points at the built-in flow while the old ones are deleted."""
     flows = api("GET", r("/authentication/flows"))
-    if not any(f["alias"] == "passkey-browser" for f in flows):
-        api("POST", r("/authentication/flows"), {"alias": "passkey-browser", "providerId": "basic-flow", "topLevel": True, "builtIn": False})
+    old = [f for f in flows if f["alias"] in (FLOW, OTP_FLOW, KEY_FLOW, "passkey-browser")]
+    if old:
+        realm = api("GET", r(""))
+        realm["browserFlow"] = "browser"
+        api("PUT", r(""), realm)
+        # A client bound to a flow keeps the flow from being deleted: clear the override first (ensure_clients sets it again from the new flow's id).
+        for c in api("GET", r("/clients")):
+            if (c.get("authenticationFlowBindingOverrides") or {}).get("browser"):
+                # An empty value for the key removes the override (an empty map would leave it in place).
+                c["authenticationFlowBindingOverrides"] = {"browser": ""}
+                api("PUT", r(f"/clients/{c['id']}"), c)
+        for f in old:
+            api("DELETE", r(f"/authentication/flows/{f['id']}"), allow=(404,))
 
-        def sub(parent, alias):
-            """Add a sub-flow called `alias` under `parent`."""
-            api("POST", r(f"/authentication/flows/{parent}/executions/flow"), {"alias": alias, "type": "basic-flow", "provider": "registration-page-form"})
+    def sub(parent, alias):
+        """Add a sub-flow called `alias` under `parent`."""
+        api("POST", r(f"/authentication/flows/{urllib.parse.quote(parent)}/executions/flow"), {"alias": alias, "type": "basic-flow", "provider": "registration-page-form"})
 
-        def add(flow, provider):
-            """Add an execution of the authenticator `provider` to `flow`."""
-            api("POST", r(f"/authentication/flows/{flow}/executions/execution"), {"provider": provider})
+    def add(flow, provider):
+        """Add an execution of the authenticator `provider` to `flow`."""
+        api("POST", r(f"/authentication/flows/{urllib.parse.quote(flow)}/executions/execution"), {"provider": provider})
 
-        # The tree: an existing session (cookie) is enough; otherwise the forms sub-flow runs a username, then one of two paths.
-        add("passkey-browser", "auth-cookie")
-        sub("passkey-browser", "passkey-forms")
-        add("passkey-forms", "auth-username-form")
-        sub("passkey-forms", "bootstrap-path")
-        add("bootstrap-path", "conditional-user-attribute")
-        add("bootstrap-path", "auth-password-form")
-        sub("passkey-forms", "passkey-path")
-        add("passkey-path", "conditional-user-attribute")
-        add("passkey-path", "conditional-level-of-authentication")
-        add("passkey-path", "webauthn-authenticator-passwordless")
-        # Requirements: cookie and forms are alternatives; the username is required; each path runs only when its condition holds.
-        execution("passkey-browser", "Cookie", "ALTERNATIVE")
-        execution("passkey-browser", "passkey-forms", "ALTERNATIVE")
-        execution("passkey-forms", "Username Form", "REQUIRED")
-        execution("passkey-forms", "bootstrap-path", "CONDITIONAL")
-        execution("passkey-forms", "passkey-path", "CONDITIONAL")
-        for f in ("bootstrap-path", "passkey-path"):
-            execution(f, "conditional-user-attribute", "REQUIRED")
-        execution("bootstrap-path", "auth-password-form", "REQUIRED")
-        execution("passkey-path", "conditional-level-of-authentication", "REQUIRED")
-        execution("passkey-path", "webauthn-authenticator-passwordless", "REQUIRED")
-        # Conditions: the bootstrap path for users marked `bootstrap=true`, the passkey path for everyone else, and level 2 (`phr`) once the passkey succeeds.
-        configure("bootstrap-path", "conditional-user-attribute", "is-bootstrap", {"attribute_name": "bootstrap", "attribute_expected_value": "true", "not": "false"})
-        configure("passkey-path", "conditional-user-attribute", "not-bootstrap", {"attribute_name": "bootstrap", "attribute_expected_value": "true", "not": "true"})
-        configure("passkey-path", "conditional-level-of-authentication", "loa-2", {"loa-condition-level": "2", "loa-max-age": "0"})
-    # Make it the realm's browser flow (the realm representation is read, changed and written back whole).
+    # The applications' flow: cookie, then the key (a conditional sub-flow: the level condition, then the key).
+    api("POST", r("/authentication/flows"), {"alias": FLOW, "providerId": "basic-flow", "topLevel": True, "builtIn": False})
+    add(FLOW, "auth-cookie")
+    sub(FLOW, KEY_FLOW)
+    sub(KEY_FLOW, "passkey-level")
+    add("passkey-level", "conditional-level-of-authentication")
+    add("passkey-level", "webauthn-authenticator-passwordless")
+    execution(FLOW, "Cookie", "ALTERNATIVE")
+    execution(FLOW, KEY_FLOW, "ALTERNATIVE")
+    execution(KEY_FLOW, "passkey-level", "CONDITIONAL")
+    execution("passkey-level", "conditional-level-of-authentication", "REQUIRED")
+    execution("passkey-level", "webauthn-authenticator-passwordless", "REQUIRED")
+    # Level 2 (`phr`) once the key succeeds.
+    configure("passkey-level", "conditional-level-of-authentication", "loa-2", {"loa-condition-level": "2", "loa-max-age": "0"})
+
+    # The bootstrap client's flow: the one-time-password page, then the gate that refuses anyone not marked `bootstrap`.
+    api("POST", r("/authentication/flows"), {"alias": OTP_FLOW, "providerId": "basic-flow", "topLevel": True, "builtIn": False})
+    add(OTP_FLOW, "auth-username-password-form")
+    sub(OTP_FLOW, "bootstrap-gate")
+    add("bootstrap-gate", "conditional-user-attribute")
+    add("bootstrap-gate", "deny-access-authenticator")
+    execution(OTP_FLOW, "auth-username-password-form", "REQUIRED")
+    execution(OTP_FLOW, "bootstrap-gate", "CONDITIONAL")
+    execution("bootstrap-gate", "conditional-user-attribute", "REQUIRED")
+    execution("bootstrap-gate", "deny-access-authenticator", "REQUIRED")
+    # The gate applies to a user who is NOT marked `bootstrap` (they are denied even with a correct password).
+    configure("bootstrap-gate", "conditional-user-attribute", "not-bootstrap", {"attribute_name": "bootstrap", "attribute_expected_value": "true", "not": "true"})
+
+    # Make the applications' flow the realm's browser flow (the realm representation is read, changed and written back whole).
     realm = api("GET", r(""))
-    realm["browserFlow"] = "passkey-browser"
+    realm["browserFlow"] = FLOW
     api("PUT", r(""), realm)
 
 
@@ -244,6 +272,14 @@ def ensure_clients(dry):
     # Sorted, so a run is deterministic and its output comparable.
     for path in sorted(glob.glob(os.path.join(CLIENTS, "*.json"))):
         client = json.loads(substitute(open(path).read(), path))
+        # A flow-binding override names its flow by alias with a leading "@" (the id is only known after ensure_flow built it): resolve it.
+        overrides = client.get("authenticationFlowBindingOverrides") or {}
+        for binding, ref in list(overrides.items()):
+            if str(ref).startswith("@"):
+                flow = [f for f in api("GET", r("/authentication/flows")) if f["alias"] == ref[1:]]
+                if not flow:
+                    die(f"{path}: no flow {ref[1:]}")
+                overrides[binding] = flow[0]["id"]
         # Clients are looked up by their public client id; Keycloak's internal id is what the update needs.
         found = api("GET", r("/clients?clientId=" + urllib.parse.quote(client["clientId"])))
         print(f"client {client['clientId']}: {'update' if found else 'create'}")
@@ -280,7 +316,14 @@ def add_key(name):
     actions.add("webauthn-register-passwordless")
     user["requiredActions"] = sorted(actions)
     api("PUT", r(f"/users/{found[0]['id']}"), user)
-    print(f"user {name}: will be asked to register another key at the next sign-in (sign in at any application, for example Grafana's \"Sign in with Meddleware\")")
+    print(f"user {name}: will be asked to register another key at the next sign-in with the key they have (sign in at any application, for example Grafana's \"Sign in with Meddleware\")")
+
+
+def enrol_url():
+    """The link that starts a first enrolment or a break-glass: the `bootstrap` client's sign-in (the one-time-password page, then the key registration), landing on the platform's own site afterwards."""
+    q = urllib.parse.urlencode({"client_id": "bootstrap", "response_type": "code", "scope": "openid", "redirect_uri": "https://meddleware.co.uk/", "state": "enrol",
+                                "code_challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM", "code_challenge_method": "S256"})
+    return f"{PUBLIC_URL}/realms/meddleware/protocol/openid-connect/auth?{q}"
 
 
 def ensure_operator(name):
@@ -303,7 +346,8 @@ def ensure_operator(name):
         uid = api("GET", r("/users?exact=true&username=" + urllib.parse.quote(name)))[0]["id"]
     # The one-time password is permanent until --finish removes it (not marked temporary: Keycloak would then ask for a change first).
     api("PUT", r(f"/users/{uid}/reset-password"), {"type": "password", "value": password, "temporary": False})
-    print(f"operator {name}: bootstrap password (shown once). Enrol the key by signing in at an application (for example Grafana's \"Sign in with Meddleware\"): the username, this password, then the key. Then run with --finish {name}: {password}")
+    print(f"operator {name}: enrol the key at this link (username, this password, then the key): {enrol_url()}")
+    print(f"operator {name}: bootstrap password (shown once), then run with --finish {name}: {password}")
 
 
 def finish_operator(name):

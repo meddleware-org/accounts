@@ -28,6 +28,9 @@ trap cleanup EXIT
 rand() { openssl rand -base64 48 | tr -dc 'A-Za-z0-9' | head -c 24; }
 
 PGPW="$(rand)"; ADMINPW="$(rand)"; CONSOLE_SECRET="$(rand)"; export CONSOLE_SECRET
+# The theme's version (appended to its CSS and JS URLs so browsers never keep an older release's files) must equal the newest released version in CHANGELOG.md.
+THEME_V="$(sed -n 's/^themeVersion=//p' "$ROOT/theme/meddleware/login/theme.properties")"; CHANGELOG_V="$(sed -n 's/^## \[\([0-9][0-9.]*\)\].*/\1/p' "$ROOT/CHANGELOG.md" | head -1)"
+[[ -n "$THEME_V" && "$THEME_V" == "$CHANGELOG_V" ]] && ok "themeVersion $THEME_V equals the newest CHANGELOG version" || bad "themeVersion '$THEME_V' differs from CHANGELOG '$CHANGELOG_V'"
 "$TOOL" build -q -t "localhost/$ID" "$ROOT" > /dev/null && ok "image builds (kc.sh build)" || { bad "image build failed"; exit 1; }
 "$TOOL" network create "$ID" > /dev/null
 "$TOOL" run -d --name "$ID-pg" --network "$ID" -e POSTGRES_PASSWORD="$PGPW" -e POSTGRES_DB=keycloak docker.io/library/postgres:18 > /dev/null
@@ -47,8 +50,8 @@ python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["issuer"].endsw
   && ok "discovery: issuer, S256, iss parameter" || bad "discovery document"
 TOKEN="$(curl -s -d grant_type=password -d client_id=admin-cli -d username=admin --data-urlencode "password=$ADMINPW" "http://127.0.0.1:$PORT/realms/master/protocol/openid-connect/token" | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')"
 REALM="$(curl -s -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:$PORT/admin/realms/meddleware")"
-python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["browserFlow"]=="passkey-browser" and d["webAuthnPolicyPasswordlessUserVerificationRequirement"]=="required"' "$REALM" \
-  && ok "browser flow is passkey-browser; user verification required" || bad "realm settings"
+python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["browserFlow"]=="passkey-first" and d["webAuthnPolicyPasswordlessUserVerificationRequirement"]=="required"' "$REALM" \
+  && ok "browser flow is passkey-first (no username step); user verification required" || bad "realm settings"
 python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["loginTheme"]=="meddleware" and "script-src '"'"'self'"'"'" in d["browserSecurityHeaders"]["contentSecurityPolicy"] and "unsafe-inline" not in d["browserSecurityHeaders"]["contentSecurityPolicy"]' "$REALM" \
   && ok "login theme meddleware and the strict Content-Security-Policy are set" || bad "theme or CSP not set"
 ACCT="$(curl -s -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:$PORT/admin/realms/meddleware/clients?clientId=account-console")"

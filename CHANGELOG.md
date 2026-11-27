@@ -5,6 +5,16 @@ patch bump, breaking changes included.
 
 ## [Unreleased]
 
+## [0.0.5] - 2026-11-27
+
+### Changed
+- **No username on the sign-in page (OWASP: a valid and an invalid credential look alike).** The realm's browser flow is now `passkey-first`: the key page opens the browser's key prompt by itself and the key (a resident credential) says who is signing in, so there is no username to be told is wrong. A first enrolment or break-glass uses the one-time-password page, reached only through the new client `bootstrap` (its own flow, `one-time-password`): one page with username and password, so a wrong username and a wrong password give the same message. `realm/apply.py --operator` prints the link; `realm/apply.py` rebuilds both flows on every run and resolves a client's `authenticationFlowBindingOverrides` written as `@<flow alias>`.
+- The theme's stylesheet and script URLs carry `?v=<themeVersion>`: Keycloak's resource paths do not change when a theme changes and its static files are cached for 30 days, so a browser kept the previous release's CSS and JS beside the new templates (the colour switch appeared unstyled and inert). `themeVersion` must equal the newest released version (`tests/smoke.sh` checks).
+- The colour-scheme switch is restyled as three pill-shaped choices.
+
+### Removed
+- The username page and the separate password page (replaced by the key page and the one-time-password page).
+
 ## [0.0.4] - 2026-11-27
 
 ### Changed

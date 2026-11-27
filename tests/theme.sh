@@ -38,10 +38,12 @@ for _ in $(seq 1 180); do curl -sf -m 2 "http://127.0.0.1:$MP/health/ready" > /d
 curl -sf -m 2 "http://127.0.0.1:$MP/health/ready" > /dev/null && ok "Keycloak ready" || { bad "Keycloak did not start"; exit 1; }
 mkdir -p "$OUT/clients"
 cp "$HERE/clients/enrol.json" "$OUT/clients/"
+# The production bootstrap client (flow-binding override to the one-time-password flow) with the test redirect.
+sed 's#https://meddleware.co.uk/#http://kc.localhost:8080/enrolled#g' "$ROOT/realm/clients/bootstrap.json" > "$OUT/clients/bootstrap.json"
 export KC_URL="http://127.0.0.1:$KP" KC_ADMIN=admin KC_ADMIN_PW="$ADMINPW" CLIENTS_DIR="$OUT/clients"
 python3 "$ROOT/realm/apply.py" > "$OUT/apply.log" 2>&1 && ok "realm applied (theme, strict CSP)" || { cat "$OUT/apply.log" >&2; bad "apply.py failed"; exit 1; }
-PW="$(python3 "$ROOT/realm/apply.py" --operator theme-user 2>&1 | sed -n 's/.*: \([A-Za-z0-9_-]*\)$/\1/p' | tail -1)"
-APPLY="$ROOT/realm/apply.py" KC="http://kc.localhost:8080" USER=theme-user PASSWORD="$PW" OUT="$OUT" HOST_RULES="MAP kc.localhost 127.0.0.1:$KP" node "$HERE/theme-check.mjs" 2>&1 | tee "$OUT/theme-check.log"
+PW="$(KC_PUBLIC_URL=http://kc.localhost:8080 python3 "$ROOT/realm/apply.py" --operator theme-user 2>&1 | grep "bootstrap password" | sed -n 's/.*: \([A-Za-z0-9_-]*\)$/\1/p')"
+THEME_VERSION="$(sed -n 's/^themeVersion=//p' "$ROOT/theme/meddleware/login/theme.properties")" KC_API="http://127.0.0.1:$KP" APPLY="$ROOT/realm/apply.py" KC="http://kc.localhost:8080" USER=theme-user PASSWORD="$PW" OUT="$OUT" HOST_RULES="MAP kc.localhost 127.0.0.1:$KP" node "$HERE/theme-check.mjs" 2>&1 | tee "$OUT/theme-check.log"
 if grep -q 'ALL PASSED' "$OUT/theme-check.log"; then ok "theme check (every page: axe, CSP, storage)"; else bad "theme check"; "$TOOL" logs "$ID-kc" 2>&1 | grep -iE "Caused by|freemarker|FTL|template|Failed" | tail -14 | cut -c1-300 >&2; fi
 echo "[test] screenshots: $OUT/shots"
 echo ""

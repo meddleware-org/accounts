@@ -13,17 +13,17 @@
     <#-- The stylesheets and the blocking theme-init script named in theme.properties. -->
     <#if properties.styles?has_content>
         <#list properties.styles?split(' ') as style>
-            <link href="${url.resourcesPath}/${style}" rel="stylesheet">
+            <link href="${url.resourcesPath}/${style}?v=${properties.themeVersion}" rel="stylesheet">
         </#list>
     </#if>
     <#if properties.scripts?has_content>
         <#list properties.scripts?split(' ') as script>
-            <script src="${url.resourcesPath}/${script}"></script>
+            <script src="${url.resourcesPath}/${script}?v=${properties.themeVersion}"></script>
         </#list>
     </#if>
     <#-- The page's own script (WebAuthn): an external module, deferred, so the page is readable before it runs. -->
-    <script type="module" src="${url.resourcesPath}/js/webauthn.js"></script>
-    <script type="module" src="${url.resourcesPath}/js/theme-switch.js"></script>
+    <script type="module" src="${url.resourcesPath}/js/webauthn.js?v=${properties.themeVersion}"></script>
+    <script type="module" src="${url.resourcesPath}/js/theme-switch.js?v=${properties.themeVersion}"></script>
 </head>
 <body data-page-id="login-${pageId}">
 <div class="page">

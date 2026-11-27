@@ -1,0 +1,16 @@
+{
+  "clientId": "bootstrap",
+  "name": "First enrolment and break-glass: the one-time-password page, then the key registration",
+  "protocol": "openid-connect",
+  "publicClient": true,
+  "standardFlowEnabled": true,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": false,
+  "redirectUris": ["https://meddleware.co.uk/"],
+  "authenticationFlowBindingOverrides": {"browser": "@one-time-password"},
+  "attributes": {
+    "pkce.code.challenge.method": "S256",
+    "use.refresh.tokens": "false"
+  }
+}

@@ -1,4 +1,4 @@
-<#-- webauthn-authenticate.ftl: step two of the sign-in: the security key. The values the script needs are data attributes, never inline script. -->
+<#-- webauthn-authenticate.ftl: the sign-in page: the security key (no username is asked: the key says who is signing in). The values the script needs are data attributes, never inline script. -->
 <#import "template.ftl" as layout>
 <@layout.registrationLayout; section>
     <#if section = "header">
