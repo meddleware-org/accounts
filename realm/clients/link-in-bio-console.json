@@ -13,7 +13,7 @@
   "webOrigins": [],
   "attributes": {
     "pkce.code.challenge.method": "S256",
-    "post.logout.redirect.uris": "https://link-in-bio-admin.meddleware.co.uk/",
+    "post.logout.redirect.uris": "https://link-in-bio-admin.meddleware.co.uk/admin/",
     "default.acr.values": "phr",
     "use.refresh.tokens": "false",
     "access.token.lifespan": "300",
